@@ -24,6 +24,10 @@ app.options("*", cors({
 app.use(express.json({ limit: "2mb" }));
 
 let firebase;
+const asyncHandler = (handler) => (req, res, next) => {
+  Promise.resolve(handler(req, res, next)).catch(next);
+};
+
 function getFirebase() {
   if (!firebase) firebase = initFirebase();
   return firebase;
@@ -142,9 +146,9 @@ app.get("/ping", (req, res) => {
   res.json({ ok: true, uptime: process.uptime(), timestamp: new Date().toISOString() });
 });
 
-app.get("/api/bootstrap", async (req, res) => {
+app.get("/api/bootstrap", asyncHandler(async (req, res) => {
   res.json(await getBootstrap());
-});
+}));
 
 app.post("/api/auth/login", (req, res) => {
   const username = String(req.body.username || "").trim();
@@ -160,80 +164,96 @@ app.get("/api/auth/me", requireAdmin, (req, res) => {
   res.json({ username: adminUsername });
 });
 
+app.get("/api/admin/firebase-status", requireAdmin, asyncHandler(async (req, res) => {
+  const { db } = getFirebase();
+  const ref = db.collection("diagnostics").doc("firebase-status");
+  await ref.set({
+    checkedAt: FieldValue.serverTimestamp(),
+    source: "render-health-check",
+  }, { merge: true });
+  const snap = await ref.get();
+  res.json({
+    ok: true,
+    projectId: process.env.GOOGLE_CLOUD_PROJECT || process.env.GCLOUD_PROJECT || "service-account",
+    canRead: snap.exists,
+    canWrite: true,
+  });
+}));
+
 app.post("/api/auth/logout", requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
-app.get("/api/site-settings", async (req, res) => {
+app.get("/api/site-settings", asyncHandler(async (req, res) => {
   res.json(await getConfigDoc("site-settings", defaults.siteSettings));
-});
+}));
 
-app.patch("/api/site-settings", requireAdmin, async (req, res) => {
+app.patch("/api/site-settings", requireAdmin, asyncHandler(async (req, res) => {
   res.json(await setConfigDoc("site-settings", req.body));
-});
+}));
 
-app.get("/api/navigation", async (req, res) => {
+app.get("/api/navigation", asyncHandler(async (req, res) => {
   res.json(await getConfigDoc("navigation", defaults.navigation));
-});
+}));
 
-app.patch("/api/navigation", requireAdmin, async (req, res) => {
+app.patch("/api/navigation", requireAdmin, asyncHandler(async (req, res) => {
   res.json(await setConfigDoc("navigation", req.body));
-});
+}));
 
-app.get("/api/pages/:slug", async (req, res) => {
+app.get("/api/pages/:slug", asyncHandler(async (req, res) => {
   const page = await getPage(req.params.slug);
   if (!page) return res.status(404).json({ message: "Page not found" });
   res.json(page);
-});
+}));
 
-app.patch("/api/pages/:slug", requireAdmin, async (req, res) => {
+app.patch("/api/pages/:slug", requireAdmin, asyncHandler(async (req, res) => {
   res.json(await setPage(req.params.slug, req.body));
-});
+}));
 
 function collectionRoutes(path, collection, fallback) {
-  app.get(`/api/${path}`, async (req, res) => {
+  app.get(`/api/${path}`, asyncHandler(async (req, res) => {
     let items = await getCollection(collection, fallback);
     if (req.query.type) items = items.filter((item) => item.type === req.query.type);
     res.json(items);
-  });
+  }));
 
-  app.get(`/api/${path}/:id`, async (req, res) => {
+  app.get(`/api/${path}/:id`, asyncHandler(async (req, res) => {
     const items = await getCollection(collection, fallback);
     const item = items.find((entry) => entry.id === req.params.id);
     if (!item) return res.status(404).json({ message: "Item not found" });
     res.json(item);
-  });
+  }));
 
-  app.post(`/api/${path}`, requireAdmin, async (req, res) => {
+  app.post(`/api/${path}`, requireAdmin, asyncHandler(async (req, res) => {
     res.status(201).json(await createItem(collection, req.body));
-  });
+  }));
 
-  app.patch(`/api/${path}/:id`, requireAdmin, async (req, res) => {
+  app.patch(`/api/${path}/:id`, requireAdmin, asyncHandler(async (req, res) => {
     res.json(await updateItem(collection, req.params.id, req.body));
-  });
+  }));
 
-  app.delete(`/api/${path}/:id`, requireAdmin, async (req, res) => {
+  app.delete(`/api/${path}/:id`, requireAdmin, asyncHandler(async (req, res) => {
     await deleteItem(collection, req.params.id);
     res.status(204).end();
-  });
+  }));
 }
 
-app.get("/api/portfolio/photos", async (req, res) => {
+app.get("/api/portfolio/photos", asyncHandler(async (req, res) => {
   const items = await getCollection("portfolio", defaults.portfolio);
   res.json(items.filter((item) => item.type === "photo"));
-});
+}));
 
-app.get("/api/portfolio/videos", async (req, res) => {
+app.get("/api/portfolio/videos", asyncHandler(async (req, res) => {
   const items = await getCollection("portfolio", defaults.portfolio);
   res.json(items.filter((item) => item.type === "video"));
-});
+}));
 
 collectionRoutes("services", "services", defaults.services);
 collectionRoutes("portfolio", "portfolio", defaults.portfolio);
 collectionRoutes("clients", "clients", defaults.clients);
 collectionRoutes("stats", "stats", defaults.stats);
 
-app.post("/api/enquiries", async (req, res) => {
+app.post("/api/enquiries", asyncHandler(async (req, res) => {
   const payload = {
     name: req.body.name || "",
     email: req.body.email || "",
@@ -243,35 +263,35 @@ app.post("/api/enquiries", async (req, res) => {
     status: "new"
   };
   res.status(201).json(await createItem("enquiries", payload));
-});
+}));
 
-app.get("/api/enquiries", requireAdmin, async (req, res) => {
+app.get("/api/enquiries", requireAdmin, asyncHandler(async (req, res) => {
   res.json(await getCollection("enquiries", []));
-});
+}));
 
-app.get("/api/enquiries/:id", requireAdmin, async (req, res) => {
+app.get("/api/enquiries/:id", requireAdmin, asyncHandler(async (req, res) => {
   const items = await getCollection("enquiries", []);
   const item = items.find((entry) => entry.id === req.params.id);
   if (!item) return res.status(404).json({ message: "Enquiry not found" });
   res.json(item);
-});
+}));
 
-app.patch("/api/enquiries/:id", requireAdmin, async (req, res) => {
+app.patch("/api/enquiries/:id", requireAdmin, asyncHandler(async (req, res) => {
   res.json(await updateItem("enquiries", req.params.id, req.body));
-});
+}));
 
-app.get("/api/media", requireAdmin, async (req, res) => {
+app.get("/api/media", requireAdmin, asyncHandler(async (req, res) => {
   res.json(await getCollection("media", []));
-});
+}));
 
-app.post("/api/media/upload", requireAdmin, async (req, res) => {
+app.post("/api/media/upload", requireAdmin, asyncHandler(async (req, res) => {
   return res.status(410).json({ message: "Uploads are disabled. Add image URLs directly in the admin." });
-});
+}));
 
-app.delete("/api/media/:id", requireAdmin, async (req, res) => {
+app.delete("/api/media/:id", requireAdmin, asyncHandler(async (req, res) => {
   await deleteItem("media", req.params.id);
   res.status(204).end();
-});
+}));
 
 app.use((error, req, res, next) => {
   console.error(error);
