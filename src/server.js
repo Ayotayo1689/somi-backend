@@ -6,9 +6,9 @@ import { FieldValue, initFirebase } from "./firebase.js";
 
 const app = express();
 const port = process.env.PORT || 5000;
-const adminUsername = process.env.ADMIN_USERNAME || "Ajoke";
-const adminPassword = process.env.ADMIN_PASSWORD || "Simi1234#";
-const adminToken = process.env.ADMIN_TOKEN || "simi-admin-token";
+const adminUsername = (process.env.ADMIN_USERNAME || "Ajoke").trim();
+const adminPassword = (process.env.ADMIN_PASSWORD || "Simi1234#").trim();
+const adminToken = (process.env.ADMIN_TOKEN || "simi-admin-token").trim();
 
 app.use(cors({ origin: process.env.FRONTEND_ORIGIN || true }));
 app.use(express.json({ limit: "2mb" }));
@@ -137,7 +137,9 @@ app.get("/api/bootstrap", async (req, res) => {
 });
 
 app.post("/api/auth/login", (req, res) => {
-  const { username, password } = req.body;
+  const username = String(req.body.username || "").trim();
+  const password = String(req.body.password || "").trim();
+
   if (username === adminUsername && password === adminPassword) {
     return res.json({ token: adminToken, username: adminUsername });
   }
