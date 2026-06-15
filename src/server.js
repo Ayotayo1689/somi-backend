@@ -10,18 +10,14 @@ const adminUsername = (process.env.ADMIN_USERNAME || "Ajoke").trim();
 const adminPassword = (process.env.ADMIN_PASSWORD || "Simi1234#").trim();
 const adminToken = (process.env.ADMIN_TOKEN || "simi-admin-token").trim();
 
-const allowedOrigins = (process.env.FRONTEND_ORIGIN || "")
-  .split(",")
-  .map((origin) => origin.trim())
-  .filter(Boolean);
-
 app.use(cors({
-  origin(origin, callback) {
-    if (!origin || !allowedOrigins.length || allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    }
-    return callback(new Error(`CORS blocked for origin: ${origin}`));
-  },
+  origin: true,
+  methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+}));
+
+app.options("*", cors({
+  origin: true,
   methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
 }));
